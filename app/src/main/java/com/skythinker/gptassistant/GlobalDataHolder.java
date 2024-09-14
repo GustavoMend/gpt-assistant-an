@@ -131,7 +131,7 @@ public class GlobalDataHolder {
     public static void loadGptApiInfo() {
         gptApiHost = sp.getString("gpt_api_host", "https://api.openai.com/");
         gptApiKey = sp.getString("gpt_api_key", "");
-        gptModel = sp.getString("gpt_model", "gpt-3.5-turbo");
+        gptModel = sp.getString("gpt_model", "gpt-4o");
         customModels = new ArrayList<>(Arrays.asList(sp.getString("custom_models", "").split(";")));
         customModels.removeIf(String::isEmpty);
     }
