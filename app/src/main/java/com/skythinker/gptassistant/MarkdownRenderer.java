@@ -106,12 +106,45 @@ public class MarkdownRenderer {
                 .usePlugin(new AbstractMarkwonPlugin() {
                     @NonNull
                     @Override
-                    public String processMarkdown(@NonNull String markdown) {
-                        // Your existing preprocessing code here (if any)
-                        return markdown;
+                    public String processMarkdown(@NonNull String markdown) { // 预处理MD文本
+                        List<String> sepList = new ArrayList<>(Arrays.asList(markdown.split("```", -1)));
+                        for (int i = 0; i < sepList.size(); i += 2) { // 跳过代码块不处理
+                            // 解决仅能渲染“$$...$$”公式的问题
+                            String regexDollar = "(?<!\\$)\\$(?!\\$)([^\\n]*?)(?<!\\$)\\$(?!\\$)"; // 匹配单行内的“$...$”
+                            String regexBrackets = "(?s)\\\\\\[(.*?)\\\\\\]"; // 跨行匹配“\[...\]”
+                            String regexParentheses = "\\\\\\(([^\\n]*?)\\\\\\)"; // 匹配单行内的“\(...\)”
+                            String latexReplacement = "\\$\\$$1\\$\\$"; // 替换为“$$...$$”
+                            // 为图片添加指向同一URL的链接
+                            String regexImage = "!\\[(.*?)\\]\\((.*?)\\)"; // 匹配“![...](...)”
+                            String imageReplacement = "[$0]($2)"; // 替换为“[![...](...)](...)”
+                            // 进行替换
+                            sepList.set(i, sepList.get(i).replaceAll(regexDollar, latexReplacement)
+                                    .replaceAll(regexBrackets, latexReplacement)
+                                    .replaceAll(regexParentheses, latexReplacement)
+                                    .replaceAll(regexImage, imageReplacement));
+                        }
+                        return String.join("```", sepList);
                     }
                 })
-                // Build the Markwon instance
+                .usePlugin(new AbstractMarkwonPlugin() { // 设置图片大小
+                    @Override
+                    public void configureConfiguration(@NonNull MarkwonConfiguration.Builder builder) {
+                        builder.imageSizeResolver(new ImageSizeResolverDef(){
+                            @NonNull @Override
+                            protected Rect resolveImageSize(@Nullable ImageSize imageSize, @NonNull Rect imageBounds, int canvasWidth, float textSize) {
+                                int maxSize = GlobalUtils.dpToPx(context, 120);
+                                if(imageBounds.width() > maxSize || imageBounds.height() > maxSize) {
+                                    float ratio = Math.min((float)maxSize / imageBounds.width(), (float)maxSize / imageBounds.height());
+                                    imageBounds.right = imageBounds.left + (int)(imageBounds.width() * ratio);
+                                    imageBounds.bottom = imageBounds.top + (int)(imageBounds.height() * ratio);
+                                }
+                                return imageBounds;
+                            }
+                        });
+                    }
+                })
+//                .usePlugin(TablePlugin.create(context)) // unstable
+//                .usePlugin(MovementMethodPlugin.create(TableAwareMovementMethod.create()))
                 .build();
     }
 
