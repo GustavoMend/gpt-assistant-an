@@ -95,7 +95,7 @@ public class MarkdownRenderer {
                     @Override
                     public void configureSpansFactory(@NonNull MarkwonSpansFactory.Builder builder) {
                         builder.appendFactory(FencedCodeBlock.class, (configuration, props) -> new ClickToCopySpan());
-//                        builder.appendFactory(FencedCodeBlock.class, (configuration, props) -> new CopyIconSpan());
+                        builder.appendFactory(FencedCodeBlock.class, (configuration, props) -> new CopyIconSpan());
                     }
                 })
                 .usePlugin(JLatexMathPlugin.create(40, builder -> builder.inlinesEnabled(true)))
