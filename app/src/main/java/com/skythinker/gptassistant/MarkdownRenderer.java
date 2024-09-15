@@ -167,7 +167,7 @@ public class MarkdownRenderer {
                             String text = buffer.subSequence(start, end).toString().trim();
                             // Copy the code block text to clipboard
                             GlobalUtils.copyToClipboard(context, text);
-                            // Show a toast notification
+                            // Show a toast notifications
                             //GlobalUtils.showToast(context, context.getString(R.string.toast_code_clipboard), false);
                         }
                     }
