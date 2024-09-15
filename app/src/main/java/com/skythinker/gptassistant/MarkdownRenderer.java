@@ -7,6 +7,7 @@ import android.graphics.Rect;
 import android.text.Layout;
 import android.text.Spanned;
 import android.text.TextPaint;
+import android.text.style.ClickableSpan;
 import android.text.style.LeadingMarginSpan;
 import android.util.Log;
 import android.view.View;
@@ -43,14 +44,21 @@ public class MarkdownRenderer {
     private final Context context;
     private final Markwon markwon;
 
-    class CodeBlockLongClickSpan implements LeadingMarginSpan {
+    class ClickToCopySpan extends ClickableSpan {
         @Override
-        public int getLeadingMargin(boolean first) { return 0; }
+        public void onClick(@NonNull View widget) {
+            if(widget instanceof TextView) {
+                Spanned spanned = (Spanned) ((TextView) widget).getText();
+                int start = spanned.getSpanStart(this);
+                int end = spanned.getSpanEnd(this);
+                String text = spanned.subSequence(start, end).toString().trim();
+                GlobalUtils.copyToClipboard(context, text);
+                GlobalUtils.showToast(context, context.getString(R.string.toast_code_clipboard), false);
+            }
+        }
 
         @Override
-        public void drawLeadingMargin(@NonNull Canvas canvas, @NonNull Paint p, int x, int dir, int top, int baseline, int bottom, @NonNull CharSequence text, int start, int end, boolean first, @NonNull Layout layout) {
-            // This method is intentionally left empty as we don't need to draw anything
-        }
+        public void updateDrawState(@NonNull TextPaint ds) { }
     }
 
     class CopyIconSpan implements LeadingMarginSpan {
@@ -86,8 +94,8 @@ public class MarkdownRenderer {
                 .usePlugin(new AbstractMarkwonPlugin() {
                     @Override
                     public void configureSpansFactory(@NonNull MarkwonSpansFactory.Builder builder) {
-                        builder.appendFactory(FencedCodeBlock.class, (configuration, props) -> new CodeBlockLongClickSpan());
-                        //builder.appendFactory(FencedCodeBlock.class, (configuration, props) -> new CopyIconSpan());
+                        builder.appendFactory(FencedCodeBlock.class, (configuration, props) -> new ClickToCopySpan());
+                        // builder.appendFactory(FencedCodeBlock.class, (configuration, props) -> new CopyIconSpan());
                     }
                 })
                 .usePlugin(JLatexMathPlugin.create(40, builder -> builder.inlinesEnabled(true)))
@@ -100,14 +108,14 @@ public class MarkdownRenderer {
                     public String processMarkdown(@NonNull String markdown) { // 预处理MD文本
                         List<String> sepList = new ArrayList<>(Arrays.asList(markdown.split("```", -1)));
                         for (int i = 0; i < sepList.size(); i += 2) { // 跳过代码块不处理
-                            // 解决仅能渲染"$$...$$"公式的问题
-                            String regexDollar = "(?<!\\$$)\\$$(?!\\$$)([^\\n]*?)(?<!\\$$)\\$$(?!\\$$)"; // 匹配单行内的"$$...$$"
-                            String regexBrackets = "(?s)\\\\\$$(.*?)\\\\\$$"; // 跨行匹配"$$...$$"
-                            String regexParentheses = "\\\\\$$([^\\n]*?)\\\\\$$"; // 匹配单行内的"$$...$$"
-                            String latexReplacement = "\\$$\\$$1\\$$\\$"; // 替换为"$$...$$"
+                            // 解决仅能渲染“$$...$$”公式的问题
+                            String regexDollar = "(?<!\\$)\\$(?!\\$)([^\\n]*?)(?<!\\$)\\$(?!\\$)"; // 匹配单行内的“$...$”
+                            String regexBrackets = "(?s)\\\\\\[(.*?)\\\\\\]"; // 跨行匹配“\[...\]”
+                            String regexParentheses = "\\\\\\(([^\\n]*?)\\\\\\)"; // 匹配单行内的“\(...\)”
+                            String latexReplacement = "\\$\\$$1\\$\\$"; // 替换为“$$...$$”
                             // 为图片添加指向同一URL的链接
-                            String regexImage = "!\$$(.*?)\$$\$$(.*?)\$$"; // 匹配"[![...](...)](...)"
-                            String imageReplacement = "[$$0]($$2)"; // 替换为"[[![...](...)](...)](...)"
+                            String regexImage = "!\\[(.*?)\\]\\((.*?)\\)"; // 匹配“![...](...)”
+                            String imageReplacement = "[$0]($2)"; // 替换为“[![...](...)](...)”
                             // 进行替换
                             sepList.set(i, sepList.get(i).replaceAll(regexDollar, latexReplacement)
                                     .replaceAll(regexBrackets, latexReplacement)
@@ -143,27 +151,10 @@ public class MarkdownRenderer {
         if(textView != null && markdown != null) {
             try {
                 markwon.setMarkdown(textView, markdown);
-                setupLongClickListener(textView);
 //                Log.d("MarkdownRenderer", "render: " + markdown);
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }
-    }
-
-    private void setupLongClickListener(TextView textView) {
-        textView.setOnLongClickListener(v -> {
-            Spanned spanned = (Spanned) textView.getText();
-            CodeBlockLongClickSpan[] spans = spanned.getSpans(0, spanned.length(), CodeBlockLongClickSpan.class);
-            for (CodeBlockLongClickSpan span : spans) {
-                int start = spanned.getSpanStart(span);
-                int end = spanned.getSpanEnd(span);
-                String codeBlock = spanned.subSequence(start, end).toString().trim();
-                GlobalUtils.copyToClipboard(context, codeBlock);
-                GlobalUtils.showToast(context, context.getString(R.string.toast_code_clipboard), false);
-                return true;
-            }
-            return false;
-        });
     }
 }
