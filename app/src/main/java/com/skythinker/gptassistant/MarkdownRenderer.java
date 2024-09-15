@@ -168,7 +168,7 @@ public class MarkdownRenderer {
                             // Copy the code block text to clipboard
                             GlobalUtils.copyToClipboard(context, text);
                             // Show a toast notification
-                            GlobalUtils.showToast(context, context.getString(R.string.toast_code_clipboard), false);
+                            //GlobalUtils.showToast(context, context.getString(R.string.toast_code_clipboard), false);
                         }
                     }
                 }
