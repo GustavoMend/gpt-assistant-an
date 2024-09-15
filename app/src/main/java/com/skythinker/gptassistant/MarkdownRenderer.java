@@ -51,16 +51,7 @@ public class MarkdownRenderer {
     private final Markwon markwon;
 
     // New CodeBlockSpan to identify code blocks for long-press action
-    class CodeBlockSpan extends ClickableSpan {
-        @Override
-        public void onClick(@NonNull View widget) {
-            // No action required on click
-        }
-
-        @Override
-        public void updateDrawState(@NonNull TextPaint ds) {
-            // No need to change text appearance
-        }
+    class CodeBlockSpan {
     }
 
     public MarkdownRenderer(Context context) {
