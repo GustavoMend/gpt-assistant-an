@@ -5,11 +5,17 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.text.Layout;
+import android.text.Spannable;
+import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.TextPaint;
+import android.text.method.LinkMovementMethod;
+import android.text.method.MovementMethod;
 import android.text.style.ClickableSpan;
 import android.text.style.LeadingMarginSpan;
 import android.util.Log;
+import android.view.GestureDetector;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.TextView;
 
@@ -44,46 +50,16 @@ public class MarkdownRenderer {
     private final Context context;
     private final Markwon markwon;
 
-    class ClickToCopySpan extends ClickableSpan {
+    // New CodeBlockSpan to identify code blocks for long-press action
+    class CodeBlockSpan extends ClickableSpan {
         @Override
         public void onClick(@NonNull View widget) {
-            if(widget instanceof TextView) {
-                Spanned spanned = (Spanned) ((TextView) widget).getText();
-                int start = spanned.getSpanStart(this);
-                int end = spanned.getSpanEnd(this);
-                String text = spanned.subSequence(start, end).toString().trim();
-                GlobalUtils.copyToClipboard(context, text);
-                GlobalUtils.showToast(context, context.getString(R.string.toast_code_clipboard), false);
-            }
+            // No action required on click
         }
 
         @Override
-        public void updateDrawState(@NonNull TextPaint ds) { }
-    }
-
-    class CopyIconSpan implements LeadingMarginSpan {
-        @Override
-        public int getLeadingMargin(boolean first) { return 0; }
-
-        @Override
-        public void drawLeadingMargin(@NonNull Canvas canvas, @NonNull Paint p, int x, int dir, int top, int baseline, int bottom, @NonNull CharSequence text, int start, int end, boolean first, @NonNull Layout layout) {
-            if (!LeadingMarginUtils.selfStart(start, text, this)) return; // 仅处理第一行
-
-            int save = canvas.save();
-            try {
-                Paint paint = new Paint();
-                String textToDraw = context.getString(R.string.text_copy_code_notice);
-                paint.setTextSize(GlobalUtils.dpToPx(context, 14));
-                paint.setColor(0x50000000);
-                Rect bounds = new Rect();
-                paint.getTextBounds(textToDraw, 0, textToDraw.length(), bounds);
-                int y = top + bounds.height() + GlobalUtils.dpToPx(context, 4);
-                int x1 = layout.getWidth() - bounds.width() - GlobalUtils.dpToPx(context, 8);
-                if(layout.getWidth() > bounds.width() + GlobalUtils.dpToPx(context, 16))
-                    canvas.drawText(textToDraw, x1, y, paint);
-            } finally {
-                canvas.restoreToCount(save);
-            }
+        public void updateDrawState(@NonNull TextPaint ds) {
+            // No need to change text appearance
         }
     }
 
@@ -94,7 +70,9 @@ public class MarkdownRenderer {
                 .usePlugin(new AbstractMarkwonPlugin() {
                     @Override
                     public void configureSpansFactory(@NonNull MarkwonSpansFactory.Builder builder) {
-                        builder.appendFactory(FencedCodeBlock.class, (configuration, props) -> new ClickToCopySpan());
+                        // Use CodeBlockSpan to identify code blocks
+                        builder.appendFactory(FencedCodeBlock.class, (configuration, props) -> new CodeBlockSpan());
+                        // You can uncomment the line below if you want to display the copy icon
                         // builder.appendFactory(FencedCodeBlock.class, (configuration, props) -> new CopyIconSpan());
                     }
                 })
@@ -105,18 +83,18 @@ public class MarkdownRenderer {
                 .usePlugin(new AbstractMarkwonPlugin() {
                     @NonNull
                     @Override
-                    public String processMarkdown(@NonNull String markdown) { // 预处理MD文本
+                    public String processMarkdown(@NonNull String markdown) { // Preprocess Markdown text
                         List<String> sepList = new ArrayList<>(Arrays.asList(markdown.split("```", -1)));
-                        for (int i = 0; i < sepList.size(); i += 2) { // 跳过代码块不处理
-                            // 解决仅能渲染“$$...$$”公式的问题
-                            String regexDollar = "(?<!\\$)\\$(?!\\$)([^\\n]*?)(?<!\\$)\\$(?!\\$)"; // 匹配单行内的“$...$”
-                            String regexBrackets = "(?s)\\\\\\[(.*?)\\\\\\]"; // 跨行匹配“\[...\]”
-                            String regexParentheses = "\\\\\\(([^\\n]*?)\\\\\\)"; // 匹配单行内的“\(...\)”
-                            String latexReplacement = "\\$\\$$1\\$\\$"; // 替换为“$$...$$”
-                            // 为图片添加指向同一URL的链接
-                            String regexImage = "!\\[(.*?)\\]\\((.*?)\\)"; // 匹配“![...](...)”
-                            String imageReplacement = "[$0]($2)"; // 替换为“[![...](...)](...)”
-                            // 进行替换
+                        for (int i = 0; i < sepList.size(); i += 2) { // Skip code blocks to avoid altering code content
+                            // Replace single $ with double $$ for LaTeX rendering
+                            String regexDollar = "(?<!\\$)\\$(?!\\$)([^\\n]*?)(?<!\\$)\\$(?!\\$)";
+                            String regexBrackets = "(?s)\\\\\\[(.*?)\\\\\\]";
+                            String regexParentheses = "\\\\\\(([^\\n]*?)\\\\\\)";
+                            String latexReplacement = "\\$\\$$1\\$\\$";
+                            // Add link to images
+                            String regexImage = "!\\[(.*?)\\]\\((.*?)\\)";
+                            String imageReplacement = "[$0]($2)";
+                            // Perform replacements
                             sepList.set(i, sepList.get(i).replaceAll(regexDollar, latexReplacement)
                                     .replaceAll(regexBrackets, latexReplacement)
                                     .replaceAll(regexParentheses, latexReplacement)
@@ -125,36 +103,94 @@ public class MarkdownRenderer {
                         return String.join("```", sepList);
                     }
                 })
-                .usePlugin(new AbstractMarkwonPlugin() { // 设置图片大小
+                .usePlugin(new AbstractMarkwonPlugin() { // Set image size limits
                     @Override
                     public void configureConfiguration(@NonNull MarkwonConfiguration.Builder builder) {
-                        builder.imageSizeResolver(new ImageSizeResolverDef(){
-                            @NonNull @Override
+                        builder.imageSizeResolver(new ImageSizeResolverDef() {
+                            @NonNull
+                            @Override
                             protected Rect resolveImageSize(@Nullable ImageSize imageSize, @NonNull Rect imageBounds, int canvasWidth, float textSize) {
                                 int maxSize = GlobalUtils.dpToPx(context, 120);
-                                if(imageBounds.width() > maxSize || imageBounds.height() > maxSize) {
-                                    float ratio = Math.min((float)maxSize / imageBounds.width(), (float)maxSize / imageBounds.height());
-                                    imageBounds.right = imageBounds.left + (int)(imageBounds.width() * ratio);
-                                    imageBounds.bottom = imageBounds.top + (int)(imageBounds.height() * ratio);
+                                if (imageBounds.width() > maxSize || imageBounds.height() > maxSize) {
+                                    float ratio = Math.min((float) maxSize / imageBounds.width(), (float) maxSize / imageBounds.height());
+                                    imageBounds.right = imageBounds.left + (int) (imageBounds.width() * ratio);
+                                    imageBounds.bottom = imageBounds.top + (int) (imageBounds.height() * ratio);
                                 }
                                 return imageBounds;
                             }
                         });
                     }
                 })
-//                .usePlugin(TablePlugin.create(context)) // unstable
-//                .usePlugin(MovementMethodPlugin.create(TableAwareMovementMethod.create()))
+                // .usePlugin(TablePlugin.create(context)) // Uncomment if you plan to use tables
+                // .usePlugin(MovementMethodPlugin.create(TableAwareMovementMethod.create()))
                 .build();
     }
 
     public void render(TextView textView, String markdown) {
-        if(textView != null && markdown != null) {
+        if (textView != null && markdown != null) {
             try {
+                // Set custom MovementMethod to handle long-press events
+                textView.setMovementMethod(new LongPressMovementMethod());
                 markwon.setMarkdown(textView, markdown);
-//                Log.d("MarkdownRenderer", "render: " + markdown);
+                // Uncomment for debugging
+                // Log.d("MarkdownRenderer", "render: " + markdown);
             } catch (Exception e) {
                 e.printStackTrace();
             }
+        }
+    }
+
+    // Custom MovementMethod to handle long-press on code blocks
+    private class LongPressMovementMethod extends LinkMovementMethod {
+
+        private GestureDetector gestureDetector;
+
+        public LongPressMovementMethod() {
+            gestureDetector = new GestureDetector(context, new GestureDetector.SimpleOnGestureListener() {
+                @Override
+                public void onLongPress(MotionEvent e) {
+                    // Handle long-press event
+                    if (gestureDetectorView instanceof TextView) {
+                        TextView widget = (TextView) gestureDetectorView;
+                        Spannable buffer = (Spannable) widget.getText();
+
+                        int x = (int) e.getX();
+                        int y = (int) e.getY();
+
+                        x -= widget.getTotalPaddingLeft();
+                        y -= widget.getTotalPaddingTop();
+
+                        x += widget.getScrollX();
+                        y += widget.getScrollY();
+
+                        Layout layout = widget.getLayout();
+                        int line = layout.getLineForVertical(y);
+                        int off = layout.getOffsetForHorizontal(line, x);
+
+                        // Look for CodeBlockSpan at the pressed position
+                        CodeBlockSpan[] codeBlockSpans = buffer.getSpans(off, off, CodeBlockSpan.class);
+
+                        if (codeBlockSpans.length != 0) {
+                            int start = buffer.getSpanStart(codeBlockSpans[0]);
+                            int end = buffer.getSpanEnd(codeBlockSpans[0]);
+                            String text = buffer.subSequence(start, end).toString().trim();
+                            // Copy the code block text to clipboard
+                            GlobalUtils.copyToClipboard(context, text);
+                            // Show a toast notification
+                            GlobalUtils.showToast(context, context.getString(R.string.toast_code_clipboard), false);
+                        }
+                    }
+                }
+            });
+        }
+
+        private View gestureDetectorView;
+
+        @Override
+        public boolean onTouchEvent(@NonNull TextView widget, @NonNull Spannable buffer, @NonNull MotionEvent event) {
+            gestureDetectorView = widget;
+            gestureDetector.onTouchEvent(event);
+            return super.onTouchEvent(widget, buffer, event);
         }
     }
 }
