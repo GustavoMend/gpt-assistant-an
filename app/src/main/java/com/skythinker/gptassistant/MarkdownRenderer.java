@@ -1,5 +1,7 @@
 package com.skythinker.gptassistant;
 
+
+import android.text.method.LinkMovementMethod; // Ensure this import is present
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
