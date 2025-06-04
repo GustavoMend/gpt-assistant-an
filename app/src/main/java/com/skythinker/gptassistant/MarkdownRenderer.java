@@ -4,12 +4,14 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.os.Handler;
 import android.text.Layout;
 import android.text.Spanned;
 import android.text.TextPaint;
 import android.text.style.ClickableSpan;
 import android.text.style.LeadingMarginSpan;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.TextView;
 
@@ -48,30 +50,25 @@ public class MarkdownRenderer {
     private final Context context;
     private final Markwon markwon;
 
-    class ClickToCopySpan extends ClickableSpan {
+    class CopyableCodeSpan implements LeadingMarginSpan {
+        private final Context context;
+        private long firstClickTime = 0;
+        private static final long DOUBLE_CLICK_TIME_DELTA = 300; // milliseconds
+        
+        public CopyableCodeSpan(Context context) {
+            this.context = context;
+        }
+        
         @Override
-        public void onClick(@NonNull View widget) {
-            if(widget instanceof TextView) {
-                Spanned spanned = (Spanned) ((TextView) widget).getText();
-                int start = spanned.getSpanStart(this);
-                int end = spanned.getSpanEnd(this);
-                String text = spanned.subSequence(start, end).toString().trim();
-                GlobalUtils.copyToClipboard(context, text);
-                GlobalUtils.showToast(context, context.getString(R.string.toast_code_clipboard), false);
-            }
+        public int getLeadingMargin(boolean first) { 
+            return 0; 
         }
 
         @Override
-        public void updateDrawState(@NonNull TextPaint ds) { }
-    }
-
-    class CopyIconSpan implements LeadingMarginSpan {
-        @Override
-        public int getLeadingMargin(boolean first) { return 0; }
-
-        @Override
-        public void drawLeadingMargin(@NonNull Canvas canvas, @NonNull Paint p, int x, int dir, int top, int baseline, int bottom, @NonNull CharSequence text, int start, int end, boolean first, @NonNull Layout layout) {
-            if (!LeadingMarginUtils.selfStart(start, text, this)) return; // 仅处理第一行
+        public void drawLeadingMargin(@NonNull Canvas canvas, @NonNull Paint p, int x, int dir, 
+                                     int top, int baseline, int bottom, @NonNull CharSequence text, 
+                                     int start, int end, boolean first, @NonNull Layout layout) {
+            if (!LeadingMarginUtils.selfStart(start, text, this)) return;
 
             int save = canvas.save();
             try {
@@ -88,6 +85,62 @@ public class MarkdownRenderer {
             } finally {
                 canvas.restoreToCount(save);
             }
+        }
+
+        public void handleClick(TextView textView) {
+            long currentTime = System.currentTimeMillis();
+            
+            if (firstClickTime == 0) {
+                // First click
+                firstClickTime = currentTime;
+            } else {
+                // Check if this is a double click
+                if (currentTime - firstClickTime < DOUBLE_CLICK_TIME_DELTA) {
+                    // Double click detected - copy the code
+                    Spanned spanned = (Spanned) textView.getText();
+                    int start = spanned.getSpanStart(this);
+                    int end = spanned.getSpanEnd(this);
+                    String text = spanned.subSequence(start, end).toString().trim();
+                    GlobalUtils.copyToClipboard(context, text);
+                    GlobalUtils.showToast(context, context.getString(R.string.toast_code_clipboard), false);
+                    firstClickTime = 0; // Reset
+                } else {
+                    // Too much time passed, treat as new first click
+                    firstClickTime = currentTime;
+                }
+            }
+        }
+    }
+
+    class DoubleTapMovementMethod extends TableAwareMovementMethod {
+        @Override
+        public boolean onTouchEvent(TextView widget, android.text.Spannable buffer, MotionEvent event) {
+            if (event.getAction() == MotionEvent.ACTION_UP) {
+                int x = (int) event.getX();
+                int y = (int) event.getY();
+                
+                x -= widget.getTotalPaddingLeft();
+                y -= widget.getTotalPaddingTop();
+                
+                x += widget.getScrollX();
+                y += widget.getScrollY();
+                
+                Layout layout = widget.getLayout();
+                if (layout != null) {
+                    int line = layout.getLineForVertical(y);
+                    int off = layout.getOffsetForHorizontal(line, x);
+                    
+                    // Check if click is on a CopyableCodeSpan
+                    CopyableCodeSpan[] spans = buffer.getSpans(off, off, CopyableCodeSpan.class);
+                    if (spans.length > 0) {
+                        spans[0].handleClick(widget);
+                        return true; // Consume the event to prevent default selection
+                    }
+                }
+            }
+            
+            // Let the parent handle normal text selection
+            return super.onTouchEvent(widget, buffer, event);
         }
     }
 
@@ -112,8 +165,8 @@ public class MarkdownRenderer {
                 .usePlugin(new AbstractMarkwonPlugin() {
                     @Override
                     public void configureSpansFactory(@NonNull MarkwonSpansFactory.Builder builder) {
-                        builder.appendFactory(FencedCodeBlock.class, (configuration, props) -> new ClickToCopySpan());
-//                        builder.appendFactory(FencedCodeBlock.class, (configuration, props) -> new CopyIconSpan());
+                        builder.appendFactory(FencedCodeBlock.class, (configuration, props) -> 
+                            new CopyableCodeSpan(context));
                     }
                 })
                 .usePlugin(JLatexMathPlugin.create(40, builder -> builder.inlinesEnabled(true)))
@@ -123,23 +176,19 @@ public class MarkdownRenderer {
                 .usePlugin(new AbstractMarkwonPlugin() {
                     @NonNull
                     @Override
-                    public String processMarkdown(@NonNull String markdown) { // 预处理MD文本
+                    public String processMarkdown(@NonNull String markdown) {
                         List<String> sepList = new ArrayList<>(Arrays.asList(markdown.split("```", -1)));
-                        for (int i = 0; i < sepList.size(); i += 2) { // 跳过代码块不处理
-                            // 解决仅能渲染“$$...$$”公式的问题
-                            String regexDollar = "(?<!\\$)\\$(?!\\$)([^\\n]*?)(?<!\\$)\\$(?!\\$)"; // 匹配单行内的“$...$”
-                            String regexBrackets = "(?s)\\\\\\[(.*?)\\\\\\]"; // 跨行匹配“\[...\]”
-                            String regexParentheses = "\\\\\\(([^\\n]*?)\\\\\\)"; // 匹配单行内的“\(...\)”
-                            String latexReplacement = "\\$\\$$1\\$\\$"; // 替换为“$$...$$”
-                            // 为图片添加指向同一URL的链接
-                            String regexImage = "!\\[(.*?)\\]\\((.*?)\\)"; // 匹配“![...](...)”
-                            String imageReplacement = "[$0]($2)"; // 替换为“[![...](...)](...)”
-                            // 将开头的<think>内容替换为代码块
-                            String regexThinkComplete = "(?s)^<think>\\n(.*?)\\n</think>\\n"; // 匹配开头的“<think>...</think>”
-                            String thinkCompleteReplacement = "```text\n" + context.getString(R.string.text_think_header) + "\n\n$1\n```\n"; // 替换为代码块
-                            String regexThinkStart = "(?s)^<think>\\n(.*?)$"; // 匹配开头的“<think>...”到结尾
-                            String thinkStartReplacement = "```text\n" + context.getString(R.string.text_thinking_header) + "\n\n$1\n```\n"; // 替换为代码块
-                            // 进行替换
+                        for (int i = 0; i < sepList.size(); i += 2) {
+                            String regexDollar = "(?<!\\$)\\$(?!\\$)([^\\n]*?)(?<!\\$)\\$(?!\\$)";
+                            String regexBrackets = "(?s)\\\\\\[(.*?)\\\\\\]";
+                            String regexParentheses = "\\\\\\(([^\\n]*?)\\\\\\)";
+                            String latexReplacement = "\\$\\$$1\\$\\$";
+                            String regexImage = "!\\[(.*?)\\]\\((.*?)\\)";
+                            String imageReplacement = "[$0]($2)";
+                            String regexThinkComplete = "(?s)^<think>\\n(.*?)\\n</think>\\n";
+                            String thinkCompleteReplacement = "```text\n" + context.getString(R.string.text_think_header) + "\n\n$1\n```\n";
+                            String regexThinkStart = "(?s)^<think>\\n(.*?)$";
+                            String thinkStartReplacement = "```text\n" + context.getString(R.string.text_thinking_header) + "\n\n$1\n```\n";
                             sepList.set(i, sepList.get(i).replaceAll(regexDollar, latexReplacement)
                                     .replaceAll(regexBrackets, latexReplacement)
                                     .replaceAll(regexParentheses, latexReplacement)
@@ -150,7 +199,7 @@ public class MarkdownRenderer {
                         return String.join("```", sepList);
                     }
                 })
-                .usePlugin(new AbstractMarkwonPlugin() { // 设置图片大小
+                .usePlugin(new AbstractMarkwonPlugin() {
                     @Override
                     public void configureConfiguration(@NonNull MarkwonConfiguration.Builder builder) {
                         builder.imageSizeResolver(new ImageSizeResolverDef(){
@@ -167,29 +216,8 @@ public class MarkdownRenderer {
                         });
                     }
                 })
-//                .usePlugin(new AbstractMarkwonPlugin() { // 捕获图片点击事件
-//                    @Override
-//                    public void configureSpansFactory(@NonNull MarkwonSpansFactory.Builder builder) {
-//                        builder.appendFactory(Image.class, (configuration, props) -> {
-//                            String url = ImageProps.DESTINATION.require(props);
-//                            return new LinkSpan(configuration.theme(), url, new ImageLinkResolver(configuration.linkResolver()));
-//                        });
-//                        super.configureSpansFactory(builder);
-//                    }
-//                })
-//                .usePlugin(new AbstractMarkwonPlugin() { // 捕获链接点击重定向到内置WebView
-//                    @Override
-//                    public void configureConfiguration(@NonNull MarkwonConfiguration.Builder builder) {
-//                        builder.linkResolver(new LinkResolver() {
-//                            @Override
-//                            public void resolve(@NonNull View view, @NonNull String link) {
-//                                WebViewActivity.openUrl(context, null, link);
-//                            }
-//                        });
-//                    }
-//                })
                 .usePlugin(TablePlugin.create(context))
-                .usePlugin(MovementMethodPlugin.create(TableAwareMovementMethod.create()))
+                .usePlugin(MovementMethodPlugin.create(new DoubleTapMovementMethod()))
                 .build();
     }
 
@@ -197,7 +225,6 @@ public class MarkdownRenderer {
         if(textView != null && markdown != null) {
             try {
                 markwon.setMarkdown(textView, markdown);
-//                Log.d("MarkdownRenderer", "render: " + markdown);
             } catch (Exception e) {
                 e.printStackTrace();
             }
