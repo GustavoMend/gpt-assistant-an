@@ -60,7 +60,13 @@ public class MarkdownRenderer {
                 // Clear any existing selection to prevent the span from being auto-selected
                 if (textView.hasSelection()) {
                     textView.clearFocus();
-                    textView.setSelection(0, 0);
+                    if (textView instanceof EditText) {
+                        ((EditText) textView).setSelection(0);
+                    } else {
+                        // For TextView, we need to clear selection differently
+                        textView.onWindowFocusChanged(false);
+                        textView.onWindowFocusChanged(true);
+                    }
                 }
                 handleClick(textView);
             }
