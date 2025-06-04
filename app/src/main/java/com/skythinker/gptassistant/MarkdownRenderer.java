@@ -56,7 +56,13 @@ public class MarkdownRenderer {
         @Override
         public void onClick(@NonNull View widget) {
             if (widget instanceof TextView) {
-                handleClick((TextView) widget);
+                TextView textView = (TextView) widget;
+                // Clear any existing selection to prevent the span from being auto-selected
+                if (textView.hasSelection()) {
+                    textView.clearFocus();
+                    textView.setSelection(0, 0);
+                }
+                handleClick(textView);
             }
         }
         
