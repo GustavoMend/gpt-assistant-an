@@ -4,15 +4,12 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
-import android.os.Handler;
 import android.text.Layout;
 import android.text.Spanned;
 import android.text.TextPaint;
-import android.text.method.LinkMovementMethod;
 import android.text.style.ClickableSpan;
 import android.text.style.LeadingMarginSpan;
 import android.util.Log;
-import android.view.MotionEvent;
 import android.view.View;
 import android.widget.TextView;
 
@@ -20,7 +17,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.commonmark.node.FencedCodeBlock;
-import org.commonmark.node.Image;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -31,17 +27,13 @@ import io.noties.markwon.LinkResolver;
 import io.noties.markwon.Markwon;
 import io.noties.markwon.MarkwonConfiguration;
 import io.noties.markwon.MarkwonSpansFactory;
-import io.noties.markwon.core.spans.LinkSpan;
 import io.noties.markwon.ext.latex.JLatexMathPlugin;
-import io.noties.markwon.ext.tables.TableAwareMovementMethod;
 import io.noties.markwon.ext.tables.TablePlugin;
-import io.noties.markwon.image.ImageProps;
 import io.noties.markwon.image.ImageSize;
 import io.noties.markwon.image.ImageSizeResolverDef;
 import io.noties.markwon.image.ImagesPlugin;
 import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin;
 import io.noties.markwon.linkify.LinkifyPlugin;
-import io.noties.markwon.movement.MovementMethodPlugin;
 import io.noties.markwon.syntax.Prism4jThemeDefault;
 import io.noties.markwon.syntax.SyntaxHighlightPlugin;
 import io.noties.markwon.utils.LeadingMarginUtils;
@@ -51,13 +43,26 @@ public class MarkdownRenderer {
     private final Context context;
     private final Markwon markwon;
 
-    static class CopyableCodeSpan implements LeadingMarginSpan {
+    static class CopyableCodeSpan extends ClickableSpan implements LeadingMarginSpan {
         private final Context context;
+        private static final long DOUBLE_CLICK_TIME_DELTA = 300;
         private static long firstClickTime = 0;
-        private static final long DOUBLE_CLICK_TIME_DELTA = 300; // milliseconds
+        private static CopyableCodeSpan lastClickedSpan = null;
         
         public CopyableCodeSpan(Context context) {
             this.context = context;
+        }
+        
+        @Override
+        public void onClick(@NonNull View widget) {
+            if (widget instanceof TextView) {
+                handleClick((TextView) widget);
+            }
+        }
+        
+        @Override
+        public void updateDrawState(@NonNull TextPaint ds) {
+            // Don't change the text appearance - we don't want it to look like a link
         }
         
         @Override
@@ -88,65 +93,30 @@ public class MarkdownRenderer {
             }
         }
 
-        public void handleClick(TextView textView) {
+        private void handleClick(TextView textView) {
             long currentTime = System.currentTimeMillis();
             
-            if (firstClickTime == 0) {
-                // First click
+            // If this is a different span or too much time passed, treat as first click
+            if (lastClickedSpan != this || (firstClickTime != 0 && currentTime - firstClickTime > DOUBLE_CLICK_TIME_DELTA)) {
                 firstClickTime = currentTime;
-            } else {
-                // Check if this is a double click
-                if (currentTime - firstClickTime < DOUBLE_CLICK_TIME_DELTA) {
-                    // Double click detected - copy the code
-                    Spanned spanned = (Spanned) textView.getText();
-                    int start = spanned.getSpanStart(this);
-                    int end = spanned.getSpanEnd(this);
+                lastClickedSpan = this;
+                return;
+            }
+            
+            // If we get here and firstClickTime is set, it's a double click
+            if (firstClickTime != 0) {
+                // Double click detected - copy the code
+                Spanned spanned = (Spanned) textView.getText();
+                int start = spanned.getSpanStart(this);
+                int end = spanned.getSpanEnd(this);
+                if (start >= 0 && end >= 0 && end > start) {
                     String text = spanned.subSequence(start, end).toString().trim();
                     GlobalUtils.copyToClipboard(context, text);
                     GlobalUtils.showToast(context, context.getString(R.string.toast_code_clipboard), false);
-                    firstClickTime = 0; // Reset
-                } else {
-                    // Too much time passed, treat as new first click
-                    firstClickTime = currentTime;
                 }
+                firstClickTime = 0;
+                lastClickedSpan = null;
             }
-        }
-    }
-
-    class DoubleTapMovementMethod extends TableAwareMovementMethod {
-        
-        public DoubleTapMovementMethod() {
-            super(LinkMovementMethod.getInstance());
-        }
-        
-        @Override
-        public boolean onTouchEvent(TextView widget, android.text.Spannable buffer, MotionEvent event) {
-            if (event.getAction() == MotionEvent.ACTION_UP) {
-                int x = (int) event.getX();
-                int y = (int) event.getY();
-                
-                x -= widget.getTotalPaddingLeft();
-                y -= widget.getTotalPaddingTop();
-                
-                x += widget.getScrollX();
-                y += widget.getScrollY();
-                
-                Layout layout = widget.getLayout();
-                if (layout != null) {
-                    int line = layout.getLineForVertical(y);
-                    int off = layout.getOffsetForHorizontal(line, x);
-                    
-                    // Check if click is on a CopyableCodeSpan
-                    CopyableCodeSpan[] spans = buffer.getSpans(off, off, CopyableCodeSpan.class);
-                    if (spans.length > 0) {
-                        spans[0].handleClick(widget);
-                        return true; // Consume the event to prevent default selection
-                    }
-                }
-            }
-            
-            // Let the parent handle normal text selection
-            return super.onTouchEvent(widget, buffer, event);
         }
     }
 
@@ -223,7 +193,6 @@ public class MarkdownRenderer {
                     }
                 })
                 .usePlugin(TablePlugin.create(context))
-                .usePlugin(MovementMethodPlugin.create(new DoubleTapMovementMethod()))
                 .build();
     }
 
