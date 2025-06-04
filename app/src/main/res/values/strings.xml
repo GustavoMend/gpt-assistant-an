@@ -2,11 +2,11 @@
     <string name="app_name" translatable="false">GPTAssistant</string>
     <string name="accessibility_service_label" translatable="false">GPTAssistant</string>
     <string-array name="models">
-        <item>gpt-3.5-turbo</item>
-        <item>gpt-4</item>
-        <item>gpt-4-turbo</item>
         <item>gpt-4o</item>
-        <item>gpt-4o-mini</item>
+        <item>gpt-4.1</item>
+        <item>claude-3.7-sonnet</item>
+        <item>o3-mini</item>
+        <item>claude-4-sonnet</item>
     </string-array>
     <!--  在线资源Url  -->
     <string name="homepage_url_github" translatable="false">https://github.com/Skythinker616/gpt-assistant-android</string>
