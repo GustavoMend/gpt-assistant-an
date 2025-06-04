@@ -114,6 +114,7 @@ public class MarkdownRenderer {
                 int end = spanned.getSpanEnd(this);
                 if (start >= 0 && end >= 0 && end > start) {
                     String text = spanned.subSequence(start, end).toString().trim();
+                    text = text.replaceAll("^\\u00A0+", "").replaceAll("\\u00A0+$",
                     GlobalUtils.copyToClipboard(context, text);
                     GlobalUtils.showToast(context, context.getString(R.string.toast_code_clipboard), false);
                 }
