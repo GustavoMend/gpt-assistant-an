@@ -53,7 +53,7 @@ public class MarkdownRenderer {
 
     class CopyableCodeSpan implements LeadingMarginSpan {
         private final Context context;
-        private long firstClickTime = 0;
+        private static long firstClickTime = 0;
         private static final long DOUBLE_CLICK_TIME_DELTA = 300; // milliseconds
         
         public CopyableCodeSpan(Context context) {
