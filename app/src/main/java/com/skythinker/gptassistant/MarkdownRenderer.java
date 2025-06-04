@@ -8,6 +8,7 @@ import android.os.Handler;
 import android.text.Layout;
 import android.text.Spanned;
 import android.text.TextPaint;
+import android.text.method.LinkMovementMethod;
 import android.text.style.ClickableSpan;
 import android.text.style.LeadingMarginSpan;
 import android.util.Log;
@@ -113,6 +114,11 @@ public class MarkdownRenderer {
     }
 
     class DoubleTapMovementMethod extends TableAwareMovementMethod {
+        
+        public DoubleTapMovementMethod() {
+            super(LinkMovementMethod.getInstance());
+        }
+        
         @Override
         public boolean onTouchEvent(TextView widget, android.text.Spannable buffer, MotionEvent event) {
             if (event.getAction() == MotionEvent.ACTION_UP) {
