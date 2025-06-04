@@ -77,7 +77,7 @@ public class MarkdownRenderer {
                                      int top, int baseline, int bottom, @NonNull CharSequence text, 
                                      int start, int end, boolean first, @NonNull Layout layout) {
             if (!LeadingMarginUtils.selfStart(start, text, this)) return;
-
+            /*
             int save = canvas.save();
             try {
                 Paint paint = new Paint();
@@ -93,6 +93,7 @@ public class MarkdownRenderer {
             } finally {
                 canvas.restoreToCount(save);
             }
+            */
         }
 
         private void handleClick(TextView textView) {
