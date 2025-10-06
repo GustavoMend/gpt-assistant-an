@@ -1,3 +1,4 @@
+ 
 package com.skythinker.gptassistant;
 
 import android.content.Context;
@@ -197,7 +198,6 @@ public class MarkdownRenderer {
             int spanEnd = spanned.getSpanEnd(spans[0]);
             int spanStartLine = layout.getLineForOffset(spanStart);
 
-            // Define copy button area (top-right corner of code block)
             int padding = GlobalUtils.dpToPx(context, 8);
             int buttonWidth = GlobalUtils.dpToPx(context, 80);
             int buttonHeight = GlobalUtils.dpToPx(context, 40);
@@ -220,3 +220,4 @@ public class MarkdownRenderer {
         return false;
     }
 }
+ 
