@@ -1696,6 +1696,20 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         isRunning = false;
+        // Save current conversation before leaving
+        if(currentConversation != null && GlobalDataHolder.getAutoSaveHistory()) {
+            boolean hasValidMessages = (multiChatList.size() > 0 && multiChatList.get(0).role != ChatRole.SYSTEM) || (multiChatList.size() > 1 && multiChatList.get(0).role == ChatRole.SYSTEM);
+            if(hasValidMessages) {
+                if(currentConversation.id == -1) {
+                    // New conversation - add it
+                    chatManager.addConversation(currentConversation);
+                } else {
+                    // Existing conversation - update it
+                    currentConversation.updateTime();
+                    chatManager.updateConversation(currentConversation);
+                }
+            }
+        }
         Log.d("main activity", "leave main activity");
     }
 
