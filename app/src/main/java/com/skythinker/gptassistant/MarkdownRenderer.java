@@ -57,7 +57,7 @@ public class MarkdownRenderer {
         public void onClick(@NonNull View widget) {
             if (widget instanceof TextView) {
                 TextView textView = (TextView) widget;
-                textView.clearFocus();
+                //textView.clearFocus();
                 handleClick(textView);
             }
         }
