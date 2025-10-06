@@ -765,7 +765,7 @@ public class MainActivity extends Activity {
                 long id = data.getLongExtra("id", -1);
                 Log.d("MainActivity", "onActivityResult 3: id=" + id);
                 Conversation conversation = chatManager.getConversation(id);
-                chatManager.removeConversation(id);
+                //chatManager.removeConversation(id);
                 conversation.updateTime();
                 reloadConversation(conversation);
             }
