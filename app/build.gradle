@@ -7,7 +7,7 @@ android {
     compileSdk 32
 
     defaultConfig {
-        applicationId "com.skythinker.gptassistant"
+        applicationId "com.skythinker.gptassistant.modified"
         minSdk 26
         targetSdk 32
         versionCode 21
