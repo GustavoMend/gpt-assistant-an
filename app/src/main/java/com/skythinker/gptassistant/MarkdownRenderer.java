@@ -1,4 +1,3 @@
- 
 package com.skythinker.gptassistant;
 
 import android.content.Context;
@@ -223,4 +222,3 @@ public class MarkdownRenderer {
         return false;
     }
 }
- 
