@@ -10,6 +10,7 @@ import android.text.TextPaint;
 import android.text.style.ClickableSpan;
 import android.text.style.LeadingMarginSpan;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.TextView;
 
@@ -17,6 +18,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.commonmark.node.FencedCodeBlock;
+import org.commonmark.node.Image;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -27,13 +29,17 @@ import io.noties.markwon.LinkResolver;
 import io.noties.markwon.Markwon;
 import io.noties.markwon.MarkwonConfiguration;
 import io.noties.markwon.MarkwonSpansFactory;
+import io.noties.markwon.core.spans.LinkSpan;
 import io.noties.markwon.ext.latex.JLatexMathPlugin;
+import io.noties.markwon.ext.tables.TableAwareMovementMethod;
 import io.noties.markwon.ext.tables.TablePlugin;
+import io.noties.markwon.image.ImageProps;
 import io.noties.markwon.image.ImageSize;
 import io.noties.markwon.image.ImageSizeResolverDef;
 import io.noties.markwon.image.ImagesPlugin;
 import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin;
 import io.noties.markwon.linkify.LinkifyPlugin;
+import io.noties.markwon.movement.MovementMethodPlugin;
 import io.noties.markwon.syntax.Prism4jThemeDefault;
 import io.noties.markwon.syntax.SyntaxHighlightPlugin;
 import io.noties.markwon.utils.LeadingMarginUtils;
@@ -43,34 +49,7 @@ public class MarkdownRenderer {
     private final Context context;
     private final Markwon markwon;
 
-    static class CopyableCodeSpan extends ClickableSpan implements LeadingMarginSpan {
-        private final Context context;
-        private static final long DOUBLE_CLICK_TIME_DELTA = 300;
-        private static long firstClickTime = 0;
-        private static CopyableCodeSpan lastClickedSpan = null;
-        
-        public CopyableCodeSpan(Context context) {
-            this.context = context;
-        }
-        
-        @Override
-        public void onClick(@NonNull View widget) {
-            if (widget instanceof TextView) {
-                TextView textView = (TextView) widget;
-                // Ignore clicks if user is selecting text
-                if (textView.hasSelection()) {
-                    return;
-                }
-                textView.clearFocus();
-                handleClick(textView);
-            }
-        }
-        
-        @Override
-        public void updateDrawState(@NonNull TextPaint ds) {
-            // Don't change the text appearance - we don't want it to look like a link
-        }
-        
+    class CopyableCodeSpan implements LeadingMarginSpan {
         @Override
         public int getLeadingMargin(boolean first) { 
             return 0; 
@@ -81,7 +60,7 @@ public class MarkdownRenderer {
                                      int top, int baseline, int bottom, @NonNull CharSequence text, 
                                      int start, int end, boolean first, @NonNull Layout layout) {
             if (!LeadingMarginUtils.selfStart(start, text, this)) return;
-            /*
+
             int save = canvas.save();
             try {
                 Paint paint = new Paint();
@@ -96,34 +75,6 @@ public class MarkdownRenderer {
                     canvas.drawText(textToDraw, x1, y, paint);
             } finally {
                 canvas.restoreToCount(save);
-            }
-            */
-        }
-
-        private void handleClick(TextView textView) {
-            long currentTime = System.currentTimeMillis();
-            
-            // If this is a different span or too much time passed, treat as first click
-            if (lastClickedSpan != this || (firstClickTime != 0 && currentTime - firstClickTime > DOUBLE_CLICK_TIME_DELTA)) {
-                firstClickTime = currentTime;
-                lastClickedSpan = this;
-                return;
-            }
-            
-            // If we get here and firstClickTime is set, it's a double click
-            if (firstClickTime != 0) {
-                // Double click detected - copy the code
-                Spanned spanned = (Spanned) textView.getText();
-                int start = spanned.getSpanStart(this);
-                int end = spanned.getSpanEnd(this);
-                if (start >= 0 && end >= 0 && end > start) {
-                    String text = spanned.subSequence(start, end).toString();
-                    text = text.replaceAll("^\\u00A0+", "").replaceAll("\\u00A0+$", "").trim();
-                    GlobalUtils.copyToClipboard(context, text);
-                    GlobalUtils.showToast(context, context.getString(R.string.toast_code_clipboard), false);
-                }
-                firstClickTime = 0;
-                lastClickedSpan = null;
             }
         }
     }
@@ -149,8 +100,7 @@ public class MarkdownRenderer {
                 .usePlugin(new AbstractMarkwonPlugin() {
                     @Override
                     public void configureSpansFactory(@NonNull MarkwonSpansFactory.Builder builder) {
-                        builder.appendFactory(FencedCodeBlock.class, (configuration, props) -> 
-                            new CopyableCodeSpan(context));
+                        builder.appendFactory(FencedCodeBlock.class, (configuration, props) -> new CopyableCodeSpan());
                     }
                 })
                 .usePlugin(JLatexMathPlugin.create(40, builder -> builder.inlinesEnabled(true)))
@@ -163,12 +113,12 @@ public class MarkdownRenderer {
                     public String processMarkdown(@NonNull String markdown) {
                         List<String> sepList = new ArrayList<>(Arrays.asList(markdown.split("```", -1)));
                         for (int i = 0; i < sepList.size(); i += 2) {
-                            String regexDollar = "(?<!\\$)\\$(?!\\$)([^\\n]*?)(?<!\\$)\\$(?!\\$)";
-                            String regexBrackets = "(?s)\\\\\\[(.*?)\\\\\\]";
-                            String regexParentheses = "\\\\\\(([^\\n]*?)\\\\\\)";
-                            String latexReplacement = "\\$\\$$1\\$\\$";
-                            String regexImage = "!\\[(.*?)\\]\\((.*?)\\)";
-                            String imageReplacement = "[$0]($2)";
+                            String regexDollar = "(?<!\\$$)\\$$(?!\\$$)([^\\n]*?)(?<!\\$$)\\$$(?!\\$$)";
+                            String regexBrackets = "(?s)\\\\\$$(.*?)\\\\\$$";
+                            String regexParentheses = "\\\\\$$([^\\n]*?)\\\\\$$";
+                            String latexReplacement = "\\$$\\$$1\\$$\\$";
+                            String regexImage = "!\$$(.*?)\$$\$$(.*?)\$$";
+                            String imageReplacement = "[$$0]($$2)";
                             String regexThinkComplete = "(?s)^<think>\\n(.*?)\\n</think>\\n";
                             String thinkCompleteReplacement = "```text\n" + context.getString(R.string.text_think_header) + "\n\n$1\n```\n";
                             String regexThinkStart = "(?s)^<think>\\n(.*?)$";
@@ -201,6 +151,7 @@ public class MarkdownRenderer {
                     }
                 })
                 .usePlugin(TablePlugin.create(context))
+                .usePlugin(MovementMethodPlugin.create(TableAwareMovementMethod.create()))
                 .build();
     }
 
@@ -208,9 +159,64 @@ public class MarkdownRenderer {
         if(textView != null && markdown != null) {
             try {
                 markwon.setMarkdown(textView, markdown);
+                setupCopyOnClick(textView);
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }
+    }
+
+    private void setupCopyOnClick(TextView textView) {
+        textView.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                if (event.getAction() == MotionEvent.ACTION_UP) {
+                    if (handleCopyButtonClick(textView, event)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        });
+    }
+
+    private boolean handleCopyButtonClick(TextView textView, MotionEvent event) {
+        Spanned spanned = (Spanned) textView.getText();
+        Layout layout = textView.getLayout();
+        if (layout == null) return false;
+
+        int x = (int) event.getX();
+        int y = (int) event.getY();
+        
+        int line = layout.getLineForVertical(y);
+        int offset = layout.getOffsetForHorizontal(line, x);
+
+        CopyableCodeSpan[] spans = spanned.getSpans(offset, offset, CopyableCodeSpan.class);
+        if (spans.length > 0) {
+            int spanStart = spanned.getSpanStart(spans[0]);
+            int spanEnd = spanned.getSpanEnd(spans[0]);
+            int spanStartLine = layout.getLineForOffset(spanStart);
+
+            // Define copy button area (top-right corner of code block)
+            int padding = GlobalUtils.dpToPx(context, 8);
+            int buttonWidth = GlobalUtils.dpToPx(context, 80);
+            int buttonHeight = GlobalUtils.dpToPx(context, 40);
+            
+            int lineTop = layout.getLineTop(spanStartLine);
+            int layoutWidth = layout.getWidth();
+
+            boolean inButtonArea = x > (layoutWidth - buttonWidth - padding) &&
+                                   y >= lineTop && 
+                                   y <= (lineTop + buttonHeight);
+
+            if (inButtonArea) {
+                String code = spanned.subSequence(spanStart, spanEnd).toString()
+                    .replaceAll("^\\u00A0+", "").replaceAll("\\u00A0+$", "").trim();
+                GlobalUtils.copyToClipboard(context, code);
+                GlobalUtils.showToast(context, context.getString(R.string.toast_code_clipboard), false);
+                return true;
+            }
+        }
+        return false;
     }
 }
