@@ -57,7 +57,11 @@ public class MarkdownRenderer {
         public void onClick(@NonNull View widget) {
             if (widget instanceof TextView) {
                 TextView textView = (TextView) widget;
-                //textView.clearFocus();
+                // Ignore clicks if user is selecting text
+                if (textView.hasSelection()) {
+                    return;
+                }
+                textView.clearFocus();
                 handleClick(textView);
             }
         }
