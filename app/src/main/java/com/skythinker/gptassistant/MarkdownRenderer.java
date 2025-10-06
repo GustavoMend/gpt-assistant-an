@@ -114,16 +114,19 @@ public class MarkdownRenderer {
                     public String processMarkdown(@NonNull String markdown) {
                         List<String> sepList = new ArrayList<>(Arrays.asList(markdown.split("```", -1)));
                         for (int i = 0; i < sepList.size(); i += 2) {
-                            String regexDollar = "(?<!\\$$)\\$$(?!\\$$)([^\\n]*?)(?<!\\$$)\\$$(?!\\$$)";
-                            String regexBrackets = "(?s)\\\\\$$(.*?)\\\\\$$";
-                            String regexParentheses = "\\\\\$$([^\\n]*?)\\\\\$$";
-                            String latexReplacement = "\\$$\\$$1\\$$\\$";
-                            String regexImage = "!\$$(.*?)\$$\$$(.*?)\$$";
-                            String imageReplacement = "[$$0]($$2)";
-                            String regexThinkComplete = "(?s)^<think>\\n(.*?)\\n</think>\\n";
-                            String thinkCompleteReplacement = "```text\n" + context.getString(R.string.text_think_header) + "\n\n$1\n```\n";
-                            String regexThinkStart = "(?s)^<think>\\n(.*?)$";
-                            String thinkStartReplacement = "```text\n" + context.getString(R.string.text_thinking_header) + "\n\n$1\n```\n";
+                            String regexDollar = "(?<!\\$)\\$(?!\\$)([^\\n]*?)(?<!\\$)\\$(?!\\$)"; // 匹配单行内的“$...$”
+                            String regexBrackets = "(?s)\\\\\\[(.*?)\\\\\\]"; // 跨行匹配“\[...\]”
+                            String regexParentheses = "\\\\\\(([^\\n]*?)\\\\\\)"; // 匹配单行内的“\(...\)”
+                            String latexReplacement = "\\$\\$$1\\$\\$"; // 替换为“$$...$$”
+                            // 为图片添加指向同一URL的链接
+                            String regexImage = "!\\[(.*?)\\]\\((.*?)\\)"; // 匹配“![...](...)”
+                            String imageReplacement = "[$0]($2)"; // 替换为“[![...](...)](...)”
+                            // 将开头的<think>内容替换为代码块
+                            String regexThinkComplete = "(?s)^<think>\\n(.*?)\\n</think>\\n"; // 匹配开头的“<think>...</think>”
+                            String thinkCompleteReplacement = "```text\n" + context.getString(R.string.text_think_header) + "\n\n$1\n```\n"; // 替换为代码块
+                            String regexThinkStart = "(?s)^<think>\\n(.*?)$"; // 匹配开头的“<think>...”到结尾
+                            String thinkStartReplacement = "```text\n" + context.getString(R.string.text_thinking_header) + "\n\n$1\n```\n"; // 替换为代码块
+                            // 进行替换
                             sepList.set(i, sepList.get(i).replaceAll(regexDollar, latexReplacement)
                                     .replaceAll(regexBrackets, latexReplacement)
                                     .replaceAll(regexParentheses, latexReplacement)
