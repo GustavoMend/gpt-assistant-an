@@ -4,9 +4,10 @@
     <string-array name="models">
         <item>gpt-4o</item>
         <item>gpt-4.1</item>
-        <item>claude-3.7-sonnet</item>
-        <item>o3-mini</item>
-        <item>claude-4-sonnet</item>
+        <item>gpt-5</item>
+        <item>claude-sonnet-4-5</item>
+        <item>gpt-5-mini</item>
+        <item>gemini-2.5-flash</item>
     </string-array>
     <!--  在线资源Url  -->
     <string name="homepage_url_github" translatable="false">https://github.com/Skythinker616/gpt-assistant-android</string>
@@ -153,7 +154,7 @@
     <string name="text_google_asr_typing_error">Please enable Google Voice Input</string>
     <string name="text_google_asr_permission_error">Please grant audio recording permission to Google</string>
     <string name="text_hms_asr_failed_error">\nPossibly due to the author turning off the free HMS speech service or updating the parameters in a new version, if this error continues to occur, please try to update the version or use other voice interfaces</string>
-    <string name="text_copy_code_notice">Click to copy</string>
+    <string name="text_copy_code_notice">Copy</string>
     <string name="text_hms_asr_unsupported">x86 is not supported by HMS, please use other speech recognition interface</string>
     <string name="toast_multi_chat_on">Multi-chat Mode</string>
     <string name="toast_multi_chat_off">Single-chat Mode</string>
