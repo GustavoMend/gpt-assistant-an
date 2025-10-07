@@ -493,8 +493,14 @@ public class MainActivity extends Activity {
 
             if(currentConversation != null &&
                     ((multiChatList.size() > 0 && multiChatList.get(0).role != ChatRole.SYSTEM) || (multiChatList.size() > 1 && multiChatList.get(0).role == ChatRole.SYSTEM)) &&
-                    GlobalDataHolder.getAutoSaveHistory()) // 包含有效对话则保存当前对话
-                chatManager.addConversation(currentConversation);
+                    GlobalDataHolder.getAutoSaveHistory()) {
+                if(currentConversation.id == -1) {
+                    chatManager.addConversation(currentConversation);
+                } else {
+                    currentConversation.updateTime();
+                    chatManager.updateConversation(currentConversation);
+                }
+            }
 
             currentConversation = new Conversation();
             multiChatList = currentConversation.messages;
