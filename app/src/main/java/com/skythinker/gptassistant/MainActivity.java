@@ -109,6 +109,7 @@ public class MainActivity extends Activity {
     final private List<String> ttsSentenceSeparator = Arrays.asList("。", ".", "？", "?", "！", "!", "……", "\n"); // 用于为TTS断句
     private int ttsSentenceEndIndex = 0;
     private String ttsLastId = "";
+    private static final int TTS_MIN_CHARS = 60; // Minimum characters before sending to TTS
 
     private boolean multiChat = false;
     ChatManager chatManager = null;
@@ -261,28 +262,48 @@ public class MainActivity extends Activity {
                                 if (isBottom) {
                                     scrollChatAreaToBottom(); // 渲染前在底部则渲染后滚动到底部
                                 }
-
+                                
                                 if (currentTemplateParams.getBool("speak", ttsEnabled)) { // 处理TTS
-                                    if (chatApiBuffer.startsWith("<think>\n") && !chatApiBuffer.contains("\n</think>\n")) { // 不朗读思维链部分
+                                    if (chatApiBuffer.startsWith("
+                                
+                                <div class="think">\n") && !chatApiBuffer.contains("\n</div>
+                                
+                                \n")) { // 不朗读思维链部分
                                         ttsSentenceEndIndex = tvGptReply.getText().toString().length(); // 正在思考则设置tts起点在末尾
                                     } else {
                                         String wholeText = tvGptReply.getText().toString(); // 获取可朗读的文本
                                         if (ttsSentenceEndIndex < wholeText.length()) {
-                                            int nextSentenceEndIndex = wholeText.length();
-                                            boolean found = false;
-                                            for (String separator : ttsSentenceSeparator) { // 查找最后一个断句分隔符
-                                                int index = wholeText.indexOf(separator, ttsSentenceEndIndex);
-                                                if (index != -1 && index < nextSentenceEndIndex) {
-                                                    nextSentenceEndIndex = index + separator.length();
-                                                    found = true;
+                                            // Find ALL sentence separators after current position
+                                            int bestSeparatorIndex = -1;
+                                            
+                                            for (String separator : ttsSentenceSeparator) {
+                                                int index = ttsSentenceEndIndex;
+                                                while ((index = wholeText.indexOf(separator, index)) != -1) {
+                                                    // Only consider this separator if the text up to it is long enough
+                                                    int textLength = (index + separator.length()) - ttsSentenceEndIndex;
+                                                    if (textLength >= TTS_MIN_CHARS) {
+                                                        bestSeparatorIndex = index + separator.length();
+                                                        break; // Found a good separator
+                                                    }
+                                                    index++; // Keep looking for the next occurrence
+                                                }
+                                                if (bestSeparatorIndex != -1) {
+                                                    break; // Found a suitable break point
                                                 }
                                             }
-                                            if (found) { // 找到断句分隔符则添加到朗读队列
-                                                String sentence = wholeText.substring(ttsSentenceEndIndex, nextSentenceEndIndex);
-                                                ttsSentenceEndIndex = nextSentenceEndIndex;
-                                                String id = UUID.randomUUID().toString();
-                                                tts.speak(sentence, TextToSpeech.QUEUE_ADD, null, id);
-                                                ttsLastId = id;
+                                            
+                                            // If we found a good separator, send the text
+                                            if (bestSeparatorIndex != -1) {
+                                                String sentence = wholeText.substring(ttsSentenceEndIndex, bestSeparatorIndex);
+                                                
+                                                // Skip if it's just whitespace
+                                                if (sentence.trim().length() > 0) {
+                                                    ttsSentenceEndIndex = bestSeparatorIndex;
+                                                    String id = UUID.randomUUID().toString();
+                                                    tts.speak(sentence.trim(), OpenAiTtsClient.QUEUE_ADD, null, id);
+                                                    ttsLastId = id;
+                                                    Log.d("TTS", "Queued: '" + sentence.substring(0, Math.min(30, sentence.length())) + "...' (" + sentence.length() + " chars)");
+                                                }
                                             }
                                         }
                                     }
@@ -319,10 +340,15 @@ public class MainActivity extends Activity {
                             try {
                                 markdownRenderer.render(tvGptReply, chatApiBuffer); // 渲染Markdown
                                 String ttsText = tvGptReply.getText().toString();
-                                if(currentTemplateParams.getBool("speak", ttsEnabled) && ttsText.length() > ttsSentenceEndIndex) { // 如果TTS开启则朗读剩余文本
-                                    String id = UUID.randomUUID().toString();
-                                    tts.speak(ttsText.substring(ttsSentenceEndIndex), TextToSpeech.QUEUE_ADD, null, id);
-                                    ttsLastId = id;
+                                if(currentTemplateParams.getBool("speak", ttsEnabled) && ttsText.length() > ttsSentenceEndIndex) {
+                                    String remainingText = ttsText.substring(ttsSentenceEndIndex);
+                                    // Only send remaining text if it's not just whitespace
+                                    if (remainingText.trim().length() > 0) {
+                                        String id = UUID.randomUUID().toString();
+                                        tts.speak(remainingText, OpenAiTtsClient.QUEUE_ADD, null, id);
+                                        ttsLastId = id;
+                                        Log.d("TTS", "Queued final text: " + remainingText.length() + " chars");
+                                    }
                                 }
                                 if(referenceCount > 0)
                                     chatApiBuffer += referenceStr; // 添加参考网页
