@@ -144,9 +144,10 @@ public class OpenAiTtsClient {
             requestBody.put("voice", selectedVoice);
             requestBody.put("response_format", "mp3");
 
+            // FIXED: MediaType is now the first parameter
             RequestBody body = RequestBody.create(
-                requestBody.toString(),
-                MediaType.get("application/json")
+                MediaType.get("application/json"),
+                requestBody.toString()
             );
 
             Request httpRequest = new Request.Builder()
