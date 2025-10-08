@@ -26,7 +26,7 @@ import okhttp3.Response;
 
 public class OpenAiTtsClient {
     private static final String TAG = "OpenAiTtsClient";
-    private static final String TTS_ENDPOINT = "/v1/audio/speech";
+    private static final String TTS_ENDPOINT = "v1/audio/speech";
     public static final int QUEUE_FLUSH = 0;
     public static final int QUEUE_ADD = 1;
 
