@@ -12,6 +12,7 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.LinkedList;
 import java.util.Queue;
 
@@ -66,7 +67,8 @@ public class OpenAiTtsClient {
         this.apiKey = apiKey;
         this.client = new OkHttpClient.Builder()
                 .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+                .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                 .build();
         this.mediaPlayer = new MediaPlayer();
         this.mainHandler = new Handler(Looper.getMainLooper());
@@ -144,7 +146,6 @@ public class OpenAiTtsClient {
             requestBody.put("voice", selectedVoice);
             requestBody.put("response_format", "mp3");
 
-            // FIXED: MediaType is now the first parameter
             RequestBody body = RequestBody.create(
                 MediaType.get("application/json"),
                 requestBody.toString()
@@ -156,6 +157,8 @@ public class OpenAiTtsClient {
                     .addHeader("Content-Type", "application/json")
                     .post(body)
                     .build();
+
+            Log.d(TAG, "Sending TTS request for text: " + request.text.substring(0, Math.min(50, request.text.length())));
 
             // Notify start
             if (utteranceProgressListener != null && request.utteranceId != null) {
@@ -174,13 +177,42 @@ public class OpenAiTtsClient {
 
                 @Override
                 public void onResponse(Call call, Response response) throws IOException {
+                    Log.d(TAG, "TTS response received: " + response.code());
+                    
                     if (response.isSuccessful() && response.body() != null) {
                         try {
-                            byte[] audioBytes = response.body().bytes();
+                            // Read the entire stream into memory first
+                            InputStream inputStream = response.body().byteStream();
+                            byte[] buffer = new byte[8192];
+                            int bytesRead;
+                            java.io.ByteArrayOutputStream outputStream = new java.io.ByteArrayOutputStream();
+                            
+                            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                                outputStream.write(buffer, 0, bytesRead);
+                            }
+                            
+                            byte[] audioBytes = outputStream.toByteArray();
+                            inputStream.close();
+                            outputStream.close();
+                            
+                            Log.d(TAG, "Audio data received: " + audioBytes.length + " bytes");
+                            
+                            if (audioBytes.length == 0) {
+                                Log.e(TAG, "Received empty audio data");
+                                if (utteranceProgressListener != null && request.utteranceId != null) {
+                                    mainHandler.post(() -> utteranceProgressListener.onError(request.utteranceId));
+                                }
+                                mainHandler.post(() -> processNextInQueue());
+                                return;
+                            }
+
+                            // Write to temporary file
                             File tempFile = File.createTempFile("tts_audio_", ".mp3", context.getCacheDir());
                             FileOutputStream fos = new FileOutputStream(tempFile);
                             fos.write(audioBytes);
                             fos.close();
+                            
+                            Log.d(TAG, "Audio file saved: " + tempFile.getAbsolutePath());
 
                             mainHandler.post(() -> {
                                 try {
@@ -188,12 +220,14 @@ public class OpenAiTtsClient {
                                     mediaPlayer.setDataSource(tempFile.getAbsolutePath());
                                     mediaPlayer.prepare();
                                     mediaPlayer.setOnCompletionListener(mp -> {
+                                        Log.d(TAG, "Playback completed for utterance: " + request.utteranceId);
                                         if (utteranceProgressListener != null && request.utteranceId != null) {
                                             utteranceProgressListener.onDone(request.utteranceId);
                                         }
                                         tempFile.delete();
                                         processNextInQueue();
                                     });
+                                    Log.d(TAG, "Starting audio playback");
                                     mediaPlayer.start();
                                 } catch (Exception e) {
                                     Log.e(TAG, "Error playing audio", e);
@@ -212,7 +246,15 @@ public class OpenAiTtsClient {
                             mainHandler.post(() -> processNextInQueue());
                         }
                     } else {
-                        Log.e(TAG, "TTS API error: " + response.code() + " " + response.message());
+                        String errorBody = "";
+                        try {
+                            if (response.body() != null) {
+                                errorBody = response.body().string();
+                            }
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error reading error body", e);
+                        }
+                        Log.e(TAG, "TTS API error: " + response.code() + " " + response.message() + " - " + errorBody);
                         if (utteranceProgressListener != null && request.utteranceId != null) {
                             mainHandler.post(() -> utteranceProgressListener.onError(request.utteranceId));
                         }
