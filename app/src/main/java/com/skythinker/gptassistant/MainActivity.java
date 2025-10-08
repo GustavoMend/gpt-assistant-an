@@ -264,11 +264,7 @@ public class MainActivity extends Activity {
                                 }
                                 
                                 if (currentTemplateParams.getBool("speak", ttsEnabled)) { // 处理TTS
-                                    if (chatApiBuffer.startsWith("
-                                
-                                <div class="think">\n") && !chatApiBuffer.contains("\n</div>
-                                
-                                \n")) { // 不朗读思维链部分
+                                    if (chatApiBuffer.startsWith("<think>\n") && !chatApiBuffer.contains("\n</think>\n")) { // 不朗读思维链部分
                                         ttsSentenceEndIndex = tvGptReply.getText().toString().length(); // 正在思考则设置tts起点在末尾
                                     } else {
                                         String wholeText = tvGptReply.getText().toString(); // 获取可朗读的文本
