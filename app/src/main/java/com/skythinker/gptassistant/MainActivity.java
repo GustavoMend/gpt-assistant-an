@@ -104,7 +104,7 @@ public class MainActivity extends Activity {
     ChatApiClient chatApiClient = null;
     private String chatApiBuffer = "";
 
-    private TextToSpeech tts = null;
+    private OpenAiTtsClient tts = null;
     private boolean ttsEnabled = true;
     final private List<String> ttsSentenceSeparator = Arrays.asList("。", ".", "？", "?", "！", "!", "……", "\n"); // 用于为TTS断句
     private int ttsSentenceEndIndex = 0;
@@ -152,41 +152,35 @@ public class MainActivity extends Activity {
         markdownRenderer = new MarkdownRenderer(this);
 
         // 初始化TTS
-        tts = new TextToSpeech(this, status -> {
-            if(status == TextToSpeech.SUCCESS) {
-                int res = tts.setLanguage(Locale.getDefault());
-                if(res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    Log.e("TTS", "Unsupported language.");
-                }else{
-                    tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                        @Override
-                        public void onStart(String utteranceId) {
-//                            Log.d("TTS", "onStart: " + utteranceId);
-                        }
-
-                        @Override
-                        public void onDone(String utteranceId) {
-//                            Log.d("TTS", "onDone: " + utteranceId);
-                            if(ttsLastId.equals(utteranceId) && !chatApiClient.isStreaming()) {
-                                Log.d("TTS", "Queue finished");
-                                if(multiVoice) {
-                                    Intent intent = new Intent("com.skythinker.gptassistant.KEY_SPEECH_START");
-                                    LocalBroadcastManager.getInstance(MainActivity.this).sendBroadcast(intent);
-                                }
-                            }
-                        }
-
-                        @Override
-                        public void onError(String utteranceId) {
-                            Log.e("TTS", "onError: " + utteranceId);
-                        }
-                    });
-                    Log.d("TTS", "Init success.");
+        // NEW TTS initialization - REPLACE WITH THIS:
+        tts = new OpenAiTtsClient(this, 
+                GlobalDataHolder.getGptApiHost(), 
+                GlobalDataHolder.getGptApiKey());
+        tts.setVoice("alloy"); // You can change to: echo, fable, onyx, nova, shimmer
+        tts.setOnUtteranceProgressListener(new OpenAiTtsClient.UtteranceProgressListener() {
+            @Override
+            public void onStart(String utteranceId) {
+                Log.d("TTS", "onStart: " + utteranceId);
+            }
+        
+            @Override
+            public void onDone(String utteranceId) {
+                Log.d("TTS", "onDone: " + utteranceId);
+                if(ttsLastId.equals(utteranceId) && !chatApiClient.isStreaming()) {
+                    Log.d("TTS", "Queue finished");
+                    if(multiVoice) {
+                        Intent intent = new Intent("com.skythinker.gptassistant.KEY_SPEECH_START");
+                        LocalBroadcastManager.getInstance(MainActivity.this).sendBroadcast(intent);
+                    }
                 }
-            }else{
-                Log.e("TTS", "Init failed. ErrorCode: " + status);
+            }
+        
+            @Override
+            public void onError(String utteranceId) {
+                Log.e("TTS", "onError: " + utteranceId);
             }
         });
+        Log.d("TTS", "OpenAI TTS Client initialized");
 
         setContentView(R.layout.activity_main); // 设置主界面布局
         overridePendingTransition(R.anim.translate_up_in, R.anim.translate_down_out); // 设置进入动画
