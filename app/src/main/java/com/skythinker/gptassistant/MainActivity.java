@@ -109,7 +109,7 @@ public class MainActivity extends Activity {
     final private List<String> ttsSentenceSeparator = Arrays.asList("。", ".", "？", "?", "！", "!", "……", "\n"); // 用于为TTS断句
     private int ttsSentenceEndIndex = 0;
     private String ttsLastId = "";
-    private static final int TTS_MIN_CHARS = 60; // Minimum characters before sending to TTS
+    private static final int TTS_MIN_CHARS = 250; // Minimum characters before sending to TTS
 
     private boolean multiChat = false;
     ChatManager chatManager = null;
