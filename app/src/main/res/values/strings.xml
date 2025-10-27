@@ -1,6 +1,6 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="app_name" translatable="false">GPTAssistant</string>
-    <string name="accessibility_service_label" translatable="false">GPTAssistant</string>
+    <string name="app_name" translatable="false">GMAssistant</string>
+    <string name="accessibility_service_label" translatable="false">GMAssistant</string>
     <string-array name="models">
         <item>gpt-4o</item>
         <item>gpt-4.1</item>
